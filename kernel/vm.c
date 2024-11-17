@@ -449,3 +449,40 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
     return -1;
   }
 }
+
+static void vmprint_recursive(pagetable_t pagetable, int level) {
+    if (pagetable == 0)
+        return;
+
+    // There are 512 entries in each page-table page in RISC-V Sv39
+    for (int i = 0; i < 512; i++) {
+        pte_t pte = pagetable[i];
+        
+        // Check if the PTE is valid
+        if (pte & PTE_V) {
+            // Extract the physical address from the PTE
+            uint64 pa = PTE2PA(pte);
+            
+            // Print indentation based on the level in the page table
+            for (int j = 0; j < level; j++) {
+                printf(" ..");
+            }
+            
+            // Print the index, PTE, and physical address
+            printf("%d: pte %p pa %p\n", i, pte, pa);
+            
+            // If the PTE is a leaf (points to a physical page), we do not recurse
+            // Check if it points to another page table level (not a leaf)
+            if ((pte & (PTE_R | PTE_W | PTE_X)) == 0) {
+                // This is not a leaf; recursively print the next level
+                vmprint_recursive((pagetable_t)pa, level + 1);
+            }
+        }
+    }
+}
+
+// Main function to print a page table starting at the root
+void vmprint(pagetable_t pagetable) {
+    printf("page table %p\n", pagetable);
+    vmprint_recursive(pagetable, 0);
+}

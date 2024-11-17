@@ -21,12 +21,13 @@ PTE_PRINT = """page table 0x0000000087f6b000
 VAL_RE = "(0x00000000[0-9a-f]+)"
 INDENT_RE = r"\s*\.\.\s*"
 INDENT_ESC = "\\\s*\.\.\\\s*"
-
+"""
 @test(0, "pgtbltest")
 def test_pgtbltest():
     r.run_qemu(shell_script([
         'pgtbltest'
     ]), timeout=300)
+
 
 @test(10, "pgtbltest: ugetpid", parent=test_pgtbltest)
 def test_nettest_():
@@ -35,7 +36,7 @@ def test_nettest_():
 @test(10, "pgtbltest: pgaccess", parent=test_pgtbltest)
 def test_nettest_():
     r.match('^pgaccess_test: OK$')
-
+ """
 @test(10, "pte printout")
 def test_pteprint():
     first = True

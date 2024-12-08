@@ -63,40 +63,56 @@ testsymlink(void)
   printf("Start: test symlinks\n");
 
   mkdir("/testsymlink");
-
   fd1 = open("/testsymlink/a", O_CREATE | O_RDWR);
-  if(fd1 < 0) fail("failed to open a");
+  if(fd1 < 0){
+    fail("failed to open a");
+  }
+  else 
+    printf("Successfully Opened a\n");
 
   r = symlink("/testsymlink/a", "/testsymlink/b");
-  if(r < 0)
-    fail("symlink b -> a failed");
-
-  if(write(fd1, buf, sizeof(buf)) != 4)
+  if(r < 0){
+    fail("symlink b -> a failed");}
+  else printf("symlink b -> a success \n");
+  if(write(fd1, buf, sizeof(buf)) != 4){
     fail("failed to write to a");
-
-  if (stat_slink("/testsymlink/b", &st) != 0)
+  }
+  else printf("successfuly write to a\n");
+  if (stat_slink("/testsymlink/b", &st) != 0){
     fail("failed to stat b");
-  if(st.type != T_SYMLINK)
+  }else printf("success to stat b\n");
+    
+  if(st.type != T_SYMLINK){
     fail("b isn't a symlink");
+  } else printf("b is a symlink\n");
+    
 
   fd2 = open("/testsymlink/b", O_RDWR);
-  if(fd2 < 0)
+  if(fd2 < 0){
     fail("failed to open b");
+  }else printf("success to open a\n");
   read(fd2, &c, 1);
-  if (c != 'a')
+  if (c != 'a'){
     fail("failed to read bytes from b");
+  }else printf("success to read bytes form b\n");
 
   unlink("/testsymlink/a");
-  if(open("/testsymlink/b", O_RDWR) >= 0)
+  if(open("/testsymlink/b", O_RDWR) >= 0){
     fail("Should not be able to open b after deleting a");
+  }else printf("Success b was not opened after deleting a\n");
+    
 
   r = symlink("/testsymlink/b", "/testsymlink/a");
-  if(r < 0)
+  if(r < 0){
     fail("symlink a -> b failed");
+  }else printf("Success symlink a-> b\n");
+    
 
   r = open("/testsymlink/b", O_RDWR);
-  if(r >= 0)
+  if(r>= 0){
     fail("Should not be able to open b (cycle b->a->b->..)\n");
+  } else printf("Was not able to open b due to cycle\n");
+    
   
   r = symlink("/testsymlink/nonexistent", "/testsymlink/c");
   if(r != 0)
@@ -111,7 +127,6 @@ testsymlink(void)
 
   close(fd1);
   close(fd2);
-
   fd1 = open("/testsymlink/4", O_CREATE | O_RDWR);
   if(fd1<0) fail("Failed to create 4\n");
   fd2 = open("/testsymlink/1", O_RDWR);

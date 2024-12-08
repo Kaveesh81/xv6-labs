@@ -97,12 +97,14 @@ sys_write(void)
 uint64
 sys_close(void)
 {
+  
   int fd;
   struct file *f;
 
   if(argfd(0, &fd, &f) < 0)
     return -1;
   myproc()->ofile[fd] = 0;
+  printf("reach here \n");
   fileclose(f);
   return 0;
 }
@@ -335,21 +337,50 @@ sys_open(void)
     }
   }
 
-  if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
-    iunlockput(ip);
-    end_op();
-    return -1;
+  // Handle symbolic links
+  if (ip->type == T_SYMLINK) {
+    int depth = 0, len;
+    char next[MAXPATH + 1];
+
+    while (!(omode & O_NOFOLLOW) && depth <= 10 && ip->type == T_SYMLINK) {
+      readi(ip, 0, (uint64)&len, 0, sizeof(len));
+      readi(ip, 0, (uint64)next, sizeof(len), len);
+      next[len] = '\0';
+
+      iunlockput(ip);
+      if ((ip = namei(next)) == 0) {
+        end_op();
+        return -1;
+      }
+
+      ilock(ip);
+      if (ip->type == T_DIR && omode != O_RDONLY) {
+        iunlockput(ip);
+        end_op();
+        return -1;
+      }
+      depth++;
+    }
+
+    if (depth >= 10) {
+
+      printf("Depth is greater than or equal to 10\n");
+      iunlockput(ip);
+      end_op();
+      return -1;
+    } else{
+    }
   }
 
-  if((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0){
-    if(f)
+  if ((f = filealloc()) == 0 || (fd = fdalloc(f)) < 0) {
+    if (f)
       fileclose(f);
     iunlockput(ip);
     end_op();
     return -1;
   }
 
-  if(ip->type == T_DEVICE){
+  if (ip->type == T_DEVICE) {
     f->type = FD_DEVICE;
     f->major = ip->major;
   } else {
@@ -360,15 +391,14 @@ sys_open(void)
   f->readable = !(omode & O_WRONLY);
   f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
 
-  if((omode & O_TRUNC) && ip->type == T_FILE){
+  if ((omode & O_TRUNC) && ip->type == T_FILE)
     itrunc(ip);
-  }
-
   iunlock(ip);
   end_op();
 
   return fd;
 }
+
 
 uint64
 sys_mkdir(void)
@@ -503,3 +533,29 @@ sys_pipe(void)
   }
   return 0;
 }
+uint64
+sys_symlink(void)
+{
+  char target[MAXPATH], path[MAXARG];
+  if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0){
+    return -1;
+  }
+  printf("creating a sym link. Target(%s). Path(%s)\n", target, path);
+
+  begin_op();
+  struct inode *ip = create(path, T_SYMLINK, 0, 0);
+  if(ip == 0){
+    end_op();
+    return -1;
+  }
+
+  int len = strlen(target);
+  writei(ip, 0, (uint64)&len, 0, sizeof(int));
+  writei(ip, 0, (uint64)target, sizeof(int), len + 1);
+  iupdate(ip);
+  iunlockput(ip);
+
+  end_op();
+  return 0;
+}
+

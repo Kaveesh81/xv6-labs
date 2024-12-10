@@ -346,8 +346,7 @@ iput(struct inode *ip)
     acquiresleep(&ip->lock);
 
     release(&itable.lock);
-
-    itrunc(ip);
+    itrunc(ip);//problem lies in this part
     ip->type = 0;
     iupdate(ip);
     ip->valid = 0;
@@ -382,125 +381,107 @@ iunlockput(struct inode *ip)
 static uint 
 bmap(struct inode *ip, uint bn)
 {
-    uint addr, *a;
+  uint addr, *a;
   struct buf *bp;
 
-  if (bn < NDIRECT)
-  {
-    if ((addr = ip->addrs[bn]) == 0)
+  if(bn < NDIRECT){
+    if((addr = ip->addrs[bn]) == 0)
       ip->addrs[bn] = addr = balloc(ip->dev);
     return addr;
   }
   bn -= NDIRECT;
 
-  if (bn < NINDIRECT)
-  {
-    // Load singly-indirect block, allocating if necessary.
-    if ((addr = ip->addrs[NDIRECT]) == 0)
+  if(bn < NINDIRECT){
+    // Load indirect block, allocating if necessary.
+    if((addr = ip->addrs[NDIRECT]) == 0)
       ip->addrs[NDIRECT] = addr = balloc(ip->dev);
     bp = bread(ip->dev, addr);
-    a = (uint *)bp->data;
-    if ((addr = a[bn]) == 0)
-    {
+    a = (uint*)bp->data;
+    if((addr = a[bn]) == 0){
       a[bn] = addr = balloc(ip->dev);
       log_write(bp);
     }
     brelse(bp);
     return addr;
   }
+  bn -= NINDIRECT;
   
-    // Load doubly-indirect block, allocating if necessary.
-    bn -= NINDIRECT;
-    //allocate
-    if ((addr = ip->addrs[DDIRECT]) == 0)
-    {
-      ip->addrs[DDIRECT] = addr = balloc(ip->dev);
-    }
+  // load double indirect block
+  if(bn < NDINDIRECT){
+    // check if needs to allocate
+    if((addr = ip->addrs[NDIRECT+1]) == 0)
+      ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+
     bp = bread(ip->dev, addr);
-    a = (uint *)bp->data;
-    int index = bn / NINDIRECT;
-    for (int i = 0; i <= index; i++)
-    {
-      if ((addr = a[i]) == 0)
-      {	
-        a[i] = addr = balloc(ip->dev);
-        log_write(bp);
-      }
-    }
-  	
-    brelse(bp);
-    bn -= NINDIRECT * index;
-    bp = bread(ip->dev, addr);
-    a = (uint *)bp->data;
-    if ((addr = a[bn]) == 0)
-    {
-      a[bn] = addr = balloc(ip->dev);
+    a = (uint*)bp->data;
+    // NINDIRECT = 128
+    if((addr = a[bn/NINDIRECT]) == 0){
+      a[bn/NINDIRECT] = addr = balloc(ip->dev);
       log_write(bp);
     }
     brelse(bp);
-    return addr;
-  
+    return addr; 
+  }/*End of double indirect update*/
 
-  panic("bmap: out of range");
+  panic("bmap: out of range"); 
 }
 
 // Truncate inode (discard contents).
 // Caller must hold ip->lock.
 void itrunc(struct inode *ip)
 {
-    int i, j;
-  struct buf *bp;
-  uint *a;
+ int i, j;
+    struct buf *bp1;
+    uint *a1;
 
-  for (i = 0; i < NDIRECT; i++)
-  {
-    if (ip->addrs[i])
-    {
-      bfree(ip->dev, ip->addrs[i]);
-      ip->addrs[i] = 0;
-    }
-  }
-
-  if (ip->addrs[NDIRECT])
-  {
-    bp = bread(ip->dev, ip->addrs[NDIRECT]);
-    a = (uint *)bp->data;
-    for (j = 0; j < NINDIRECT; j++)
-    {
-      if (a[j])
-        bfree(ip->dev, a[j]);
-    }
-    brelse(bp);
-    bfree(ip->dev, ip->addrs[NDIRECT]);
-    ip->addrs[NDIRECT] = 0;
-  }
-  if (ip->addrs[DDIRECT])
-  {
-    bp = bread(ip->dev, ip->addrs[DDIRECT]);
-    a = (uint *)bp->data;
-    struct buf *b;
-    uint * ba;
-    for (i = 0; i < NINDIRECT; i++)
-    {
-      if (a[i])
-      {
-        b = bread(ip->dev, a[i]);
-        ba = (uint *)b->data;
-        for (j = 0; j < NINDIRECT; j++){
-          if(ba[j]) bfree(ip->dev,ba[j]);
+    for (i = 0; i < NDIRECT; i++) {
+        if (ip->addrs[i]) {
+            bfree(ip->dev, ip->addrs[i]);
+            ip->addrs[i] = 0;
         }
-        brelse(b);
-        bfree(ip->dev,a[i]);
-        a[i] = 0;
-      }
     }
-    brelse(bp);
-    bfree(ip->dev, ip->addrs[DDIRECT]);
-    ip->addrs[DDIRECT] = 0;  
-  }
 
-  ip->size = 0;
-  iupdate(ip);
+    if (ip->addrs[NDIRECT]) {
+        // Free singly-indirect blocks
+        bp1 = bread(ip->dev, ip->addrs[NDIRECT]);
+        a1 = (uint *)bp1->data;
+        for (j = 0; j < NINDIRECT; j++) {
+            if (a1[j])
+                bfree(ip->dev, a1[j]);
+        }
+        brelse(bp1);
+        bfree(ip->dev, ip->addrs[NDIRECT]);
+        ip->addrs[NDIRECT] = 0;
+    }
+
+
+    //My symlinks wont work if this block is here 
+    /*
+    if (ip->addrs[NDIRECT + 1] ) {
+        // Free doubly-indirect blocks
+        bp1 = bread(ip->dev, ip->addrs[NDIRECT + 1]);
+        a1 = (uint *)bp1->data;
+        for (j = 0; j < NINDIRECT; j++) {
+            if (a1[j]) {
+              if(ip-> type != T_SYMLINK){
+                bp2 = bread(ip->dev, a1[j]);
+                a2 = (uint *)bp2->data;
+                for (k = 0; k < NINDIRECT; k++) {
+                    if (a2[k])
+                        bfree(ip->dev, a2[k]);
+                }
+                brelse(bp2);
+                bfree(ip->dev, a1[j]);
+              }
+            }
+        }
+        brelse(bp1);
+        bfree(ip->dev, ip->addrs[NDIRECT + 1]);
+        ip->addrs[NDIRECT + 1] = 0;
+    }
+    */
+    ip->size = 0;
+    iupdate(ip);
 }
 
 // Copy stat information from inode.

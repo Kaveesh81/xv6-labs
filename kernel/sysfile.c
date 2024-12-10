@@ -97,7 +97,6 @@ sys_write(void)
 uint64
 sys_close(void)
 {
-  
   int fd;
   struct file *f;
 
@@ -540,7 +539,6 @@ sys_symlink(void)
   if(argstr(0, target, MAXPATH) < 0 || argstr(1, path, MAXPATH) < 0){
     return -1;
   }
-  printf("creating a sym link. Target(%s). Path(%s)\n", target, path);
 
   begin_op();
   struct inode *ip = create(path, T_SYMLINK, 0, 0);
